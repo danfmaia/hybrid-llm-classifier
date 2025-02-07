@@ -1,0 +1,8 @@
+{
+  "avg_response_time": 0.0,
+  "p95_response_time": 0.0,
+  "throughput": 0.0,
+  "error_rate": 1.0,
+  "success_rate": 0.0,
+  "category_distribution": {}
+}
