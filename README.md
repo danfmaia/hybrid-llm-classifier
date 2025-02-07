@@ -13,12 +13,13 @@ A production-ready zero-shot legal document classification system powered by Mis
 - **Hybrid Validation**: FAISS vector store validation ensures classification accuracy
 - **Production-Ready Architecture**:
   - FastAPI async endpoints with comprehensive middleware
-  - Rate limiting and JWT authentication
+  - JWT authentication and rate limiting
   - Performance monitoring and logging
-- **High Performance**:
-  - < 2s response time at 150 RPM
-  - 95% classification accuracy target on LegalBench
-  - Optimized caching and GPU utilization
+- **Current Performance** (as of Feb 7, 2025):
+  - Response time: ~11.37s per request
+  - Classification accuracy: 85% on initial testing
+  - GPU utilization: 22 layers on GPU
+  - Throughput: ~5 requests per minute
 
 ## 🏗️ Technical Architecture
 
@@ -37,26 +38,54 @@ tests/                # Test suite
 1. **Classification Engine**
 
    - Mistral-7B integration via Ollama
-   - Zero-shot prompt engineering
-   - FAISS validation layer
+   - GPU-accelerated inference (22 layers)
+   - FAISS similarity validation
+   - Automatic retry logic
 
 2. **API Layer**
    - Async endpoint structure
-   - JWT authentication and rate limiting
-   - Input validation schemas
+   - JWT authentication
+   - Rate limiting (1000 req/min)
+   - Detailed error handling
 
 ## 🚦 Project Status
 
-The project is in active development with core functionality implemented:
+Current implementation status (Feb 7, 2025):
 
-✅ Classification engine with Mistral-7B  
-✅ FastAPI application structure  
-✅ Security middleware (JWT + Rate limiting)  
-✅ Basic test suite  
-🚧 Performance optimization  
-🚧 Production deployment
+✅ Core Classification Engine
+
+- GPU-accelerated Mistral-7B integration
+- Basic FAISS validation layer
+- Performance monitoring
+
+✅ API Infrastructure
+
+- FastAPI application structure
+- JWT authentication
+- Rate limiting middleware
+
+✅ Security Features
+
+- Input validation
+- Error handling
+- Request logging
+
+🚧 Performance Optimization
+
+- Current: 11.37s response time
+- Target: <2s response time
+- Planned: Response streaming, caching
 
 ## 🛠️ Installation
+
+### Prerequisites
+
+- NVIDIA GPU with 4GB+ VRAM
+- 4+ CPU cores
+- 16GB+ system RAM
+- Python 3.10+
+
+### Steps
 
 1. **Clone the repository**
 
@@ -74,7 +103,9 @@ pip install -r requirements.txt
 ```
 
 3. **Install and start Ollama**
-   Follow instructions at [Ollama.ai](https://ollama.ai) to install and run the Mistral model
+   - Follow instructions at [Ollama.ai](https://ollama.ai)
+   - Pull Mistral model: `ollama pull mistral`
+   - Verify GPU support: `nvidia-smi`
 
 ## 🚀 Quick Start
 
@@ -84,20 +115,22 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-2. **Make a classification request**
+2. **Get authentication token**
 
 ```python
 import httpx
 
 async with httpx.AsyncClient() as client:
-    # First get an access token
     auth_response = await client.post(
         "http://localhost:8000/api/v1/auth/token",
         data={"username": "your_username", "password": "your_password"}
     )
     token = auth_response.json()["access_token"]
+```
 
-    # Make classification request
+3. **Make classification request**
+
+```python
     response = await client.post(
         "http://localhost:8000/api/v1/classify",
         headers={"Authorization": f"Bearer {token}"},
@@ -118,34 +151,47 @@ make test-cov    # Run tests with coverage
 make lint        # Run linting checks
 ```
 
-### Code Quality
+### Performance Guidelines
 
-- Black for code formatting
-- isort for import sorting
-- mypy for type checking
-- pytest for testing
+- Keep documents under 2,048 tokens for optimal performance
+- Batch requests: 5-10 documents recommended
+- Memory usage: ~3.5GB VRAM baseline
+- Expected latency: ~11.37s per request
 
 ## 📈 Performance
 
-Target performance metrics (see BENCHMARKS.md for testing plan):
+Current metrics (see BENCHMARKS.md for details):
 
-- Response time: < 2s at 150 RPM target
-- Classification accuracy: 95% target on LegalBench
-- Resource utilization optimization planned
+- Average response time: 11.37s
+- Classification accuracy: 85%
+- GPU memory usage: 3.5GB VRAM
+- Throughput: ~5 requests/minute
+
+Optimization roadmap:
+
+1. Response streaming implementation
+2. Request caching layer
+3. Batch processing optimization
+4. GPU kernel tuning
 
 ## 🛣️ Roadmap
 
-1. **Q1 2024**
+1. **Short-term (Pre-deployment)**
 
-   - Performance benchmarking and optimization
-   - Caching implementation
-   - AWS production deployment
-   - Extended test coverage
+   - Implement response streaming
+   - Add request caching
+   - Optimize batch processing
 
-2. **Q2 2024**
-   - Multi-model ensemble support
-   - Real-time performance monitoring
-   - Extended legal taxonomy
+2. **Medium-term**
+
+   - Load balancing setup
+   - Memory optimization
+   - Warm-up strategies
+
+3. **Long-term**
+   - Distributed processing
+   - Custom GPU kernels
+   - Advanced caching
 
 ## 📄 License
 
@@ -157,4 +203,4 @@ While this project is primarily for demonstration purposes, we welcome feedback 
 
 ---
 
-_Note: This project is under active development. Core functionality is implemented and tested, with additional features and optimizations in progress._
+_Note: This project is under active development. Core functionality is implemented and tested, with performance optimizations in progress._
