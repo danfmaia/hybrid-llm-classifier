@@ -24,23 +24,31 @@ class Settings(BaseSettings):
     similarity_threshold: float = 0.75
 
     # Rate Limiting
-    rate_limit_requests: int = 100
+    rate_limit_requests: int = 1000
     rate_limit_window_seconds: int = 60
 
     class Config:
         env_file = ".env"
 
-    def get_classifier(self) -> HybridClassifier:
-        """Get configured classifier instance."""
-        return HybridClassifier(
-            ollama_base_url=self.ollama_base_url,
-            model_name=self.model_name,
-            embedding_dim=self.embedding_dim,
-            similarity_threshold=self.similarity_threshold
-        )
+
+_classifier_instance = None
 
 
 @lru_cache()
 def get_settings() -> Settings:
     """Cached settings instance."""
     return Settings()
+
+
+def get_classifier() -> HybridClassifier:
+    """Get singleton classifier instance."""
+    global _classifier_instance
+    if _classifier_instance is None:
+        settings = get_settings()
+        _classifier_instance = HybridClassifier(
+            ollama_base_url=settings.ollama_base_url,
+            model_name=settings.model_name,
+            embedding_dim=settings.embedding_dim,
+            similarity_threshold=settings.similarity_threshold
+        )
+    return _classifier_instance
