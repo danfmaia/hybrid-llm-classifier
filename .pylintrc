@@ -1,0 +1,5 @@
+[FORMAT]
+max-line-length=200
+
+[MESSAGES CONTROL]
+disable=C0301,W0719

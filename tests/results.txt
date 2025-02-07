@@ -1,0 +1,70 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.16, pytest-8.3.4, pluggy-1.5.0 -- /home/danfmaia/miniconda3/envs/hybrid-llm-classifier/bin/python3.10
+cachedir: .pytest_cache
+rootdir: /home/danfmaia/_repos/hybrid-llm-classifier
+configfile: pyproject.toml
+plugins: anyio-3.6.2, asyncio-0.25.3, cov-6.0.0
+asyncio: mode=strict, asyncio_default_fixture_loop_scope=None
+collecting ... collected 6 items
+
+tests/test_auth_middleware.py::test_auth_no_token PASSED                 [ 16%]
+tests/test_auth_middleware.py::test_auth_invalid_token PASSED            [ 33%]
+tests/test_auth_middleware.py::test_auth_token_generation PASSED         [ 50%]
+tests/test_auth_middleware.py::test_rate_limiting PASSED                 [ 66%]
+tests/test_auth_middleware.py::test_protected_endpoint_with_valid_token FAILED [ 83%]
+tests/test_auth_middleware.py::test_batch_request_with_rate_limit PASSED [100%]
+
+=================================== FAILURES ===================================
+___________________ test_protected_endpoint_with_valid_token ___________________
+
+test_client = <starlette.testclient.TestClient object at 0x7bbbae5f25c0>
+
+    def test_protected_endpoint_with_valid_token(test_client: TestClient) -> None:
+        """Test accessing protected endpoint with valid token."""
+        # Get a valid token
+        auth_response = test_client.post(
+            "/api/v1/auth/token",
+            data={"username": "testuser", "password": "testpass"}
+        )
+        token = auth_response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+    
+        # Access protected endpoint
+        response = test_client.post(
+            "/api/v1/classify/",
+            headers=headers,
+            json={"text": "test document"}
+        )
+        # Note: Will return 501 Not Implemented until we implement the classifier
+>       assert response.status_code in (200, 501)
+E       assert 500 in (200, 501)
+E        +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+tests/test_auth_middleware.py:79: AssertionError
+----------------------------- Captured stderr call -----------------------------
+2025-02-06 22:03:43,300 - httpx - INFO - HTTP Request: POST http://testserver/api/v1/auth/token "HTTP/1.1 200 OK"
+2025-02-06 22:03:43,335 - app.models.classifier - ERROR - HTTP error during classification: All connection attempts failed
+2025-02-06 22:03:43,335 - app.models.classifier - ERROR - Classification failed: Failed to get classification: All connection attempts failed
+2025-02-06 22:03:43,337 - httpx - INFO - HTTP Request: POST http://testserver/api/v1/classify/ "HTTP/1.1 500 Internal Server Error"
+------------------------------ Captured log call -------------------------------
+INFO     httpx:_client.py:1025 HTTP Request: POST http://testserver/api/v1/auth/token "HTTP/1.1 200 OK"
+ERROR    app.models.classifier:classifier.py:161 HTTP error during classification: All connection attempts failed
+ERROR    app.models.classifier:classifier.py:98 Classification failed: Failed to get classification: All connection attempts failed
+INFO     httpx:_client.py:1025 HTTP Request: POST http://testserver/api/v1/classify/ "HTTP/1.1 500 Internal Server Error"
+=============================== warnings summary ===============================
+../../miniconda3/envs/hybrid-llm-classifier/lib/python3.10/site-packages/faiss/loader.py:28
+  /home/danfmaia/miniconda3/envs/hybrid-llm-classifier/lib/python3.10/site-packages/faiss/loader.py:28: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+    if LooseVersion(numpy.__version__) >= "1.19":
+
+../../miniconda3/envs/hybrid-llm-classifier/lib/python3.10/site-packages/setuptools/_distutils/version.py:336
+  /home/danfmaia/miniconda3/envs/hybrid-llm-classifier/lib/python3.10/site-packages/setuptools/_distutils/version.py:336: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+    other = LooseVersion(other)
+
+../../miniconda3/envs/hybrid-llm-classifier/lib/python3.10/site-packages/pydantic/_internal/_config.py:295
+  /home/danfmaia/miniconda3/envs/hybrid-llm-classifier/lib/python3.10/site-packages/pydantic/_internal/_config.py:295: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.10/migration/
+    warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_auth_middleware.py::test_protected_endpoint_with_valid_token
+=================== 1 failed, 5 passed, 3 warnings in 0.37s ====================
