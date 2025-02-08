@@ -160,7 +160,7 @@ make lint        # Run linting checks
 
 ## 📈 Performance
 
-Current metrics (see BENCHMARKS.md for details):
+Current metrics (see [BENCHMARKS.md](./BENCHMARKS.md) for details):
 
 - Average response time: 11.37s
 - Classification accuracy: 85%
