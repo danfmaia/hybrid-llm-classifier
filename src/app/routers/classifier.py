@@ -121,6 +121,12 @@ async def classify_document(
 
         return result
 
+    except NotImplementedError as e:
+        logger.error("Classification not implemented: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail=str(e)
+        )
     except Exception as e:
         # Log the error with details
         elapsed = time.perf_counter() - start_time

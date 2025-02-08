@@ -27,8 +27,9 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 1000
     rate_limit_window_seconds: int = 60
 
-    class Config:
-        env_file = ".env"
+    model_config = {
+        "env_file": ".env"
+    }
 
 
 _classifier_instance = None

@@ -17,7 +17,7 @@ The system includes:
 - Memory-optimized batch processing
 """
 
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 import logging
 import json
 import asyncio
@@ -182,61 +182,35 @@ class HybridClassifier:
             INDEX_SIZE.labels(category=category).set(0)
 
     async def _make_api_request(
-        self,
-        endpoint: str,
-        json_data: dict,
-        timeout: float = REQUEST_TIMEOUT,
-        retries: int = MAX_RETRIES
-    ) -> dict:
+        self, endpoint: str, data: Dict[str, Any], timeout: int = 30
+    ) -> Dict[str, Any]:
         """
-        Make API request with retry logic.
+        Make an API request to Ollama.
 
         Args:
             endpoint: API endpoint
-            json_data: Request payload
+            data: Request data
             timeout: Request timeout in seconds
-            retries: Number of retries
 
         Returns:
-            API response as dictionary
+            Dict[str, Any]: API response
 
         Raises:
-            Exception: If all retries fail
+            Exception: If API request fails
         """
-        last_error = None
-        retry_count = 0
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.ollama_base_url}{endpoint}",
+                    json=data,
+                    timeout=timeout
+                )
+                response.raise_for_status()
+                return await response.json()
 
-        while retry_count < retries:
-            try:
-                async with httpx.AsyncClient(timeout=timeout) as client:
-                    response = await client.post(
-                        f"{self.ollama_base_url}{endpoint}",
-                        json=json_data
-                    )
-                    response.raise_for_status()
-                    result = response.json()
-
-                    if isinstance(result, dict) and "error" in result:
-                        raise Exception(f"API error: {result['error']}")
-
-                    return result
-
-            except (httpx.ConnectError, httpx.ReadTimeout) as e:
-                last_error = e
-                retry_count += 1
-                if retry_count < retries:
-                    await asyncio.sleep(RETRY_DELAY * retry_count)
-                    logger.warning(
-                        f"Retrying API request (attempt {retry_count + 1}/{retries})")
-                continue
-
-            except Exception as e:
-                logger.error("API request failed: %s", str(e))
-                raise Exception(f"API request failed: {str(e)}") from e
-
-        raise Exception(
-            f"All retry attempts failed: {str(last_error)}"
-        ) from last_error
+        except Exception as e:
+            logger.error("API request failed: %s", str(e))
+            raise Exception(f"API request failed: {str(e)}") from e
 
     async def classify(self, text: str) -> ClassificationResult:
         """
@@ -439,7 +413,7 @@ class HybridClassifier:
 
         except Exception as e:
             logger.error("Failed to generate embedding: %s", str(e))
-            raise
+            raise Exception(f"Failed to generate embedding: {str(e)}") from e
 
     async def _validate_classification(
         self, text: str, category: str
@@ -554,8 +528,8 @@ class HybridClassifier:
             faiss.normalize_L2(embeddings_array)
 
             # Add to both indices
-            self.index.add(embeddings_array)
-            self.normalized_index.add(embeddings_array)
+            self.index.add(x=embeddings_array)
+            self.normalized_index.add(x=embeddings_array)
 
             # Update category metadata
             self.categories.extend([category] * len(examples))
