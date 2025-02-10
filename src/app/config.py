@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # Classifier Settings
     ollama_base_url: str = "http://localhost:11434"
-    model_name: str = "mistral"
+    model_name: str = "legal-classifier"  # Using our optimized model
     embedding_dim: int = 384
     similarity_threshold: float = 0.75
 

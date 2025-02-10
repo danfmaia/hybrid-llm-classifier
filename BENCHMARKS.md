@@ -42,6 +42,105 @@
 | GPU VRAM        | N/A    | 3.5GB  | 22 layers offloaded to GPU       |
 | GPU Utilization | N/A    | ~80%   | During inference                 |
 
+## Optimization Experiments (Feb 8, 2025)
+
+### Baseline Performance
+
+Initial configuration with default Mistral-7B parameters:
+
+- Total Latency: 12.24s
+- LLM Latency: 9.86s
+- Embedding Latency: 0.95s
+- Validation Latency: 1.43s
+- Classification: Consistent (Contract, 0.81 confidence)
+
+### Optimization Attempts
+
+1. Aggressive GPU Optimization
+
+   ```
+   num_ctx: 512
+   num_gpu: 35
+   num_thread: 8
+   ```
+
+   Result: Failed with internal server error
+   Lesson: GPU layer count too high for available VRAM
+
+2. Conservative Optimization
+
+   ```
+   num_ctx: 1024
+   num_gpu: 12
+   num_thread: 6
+   ```
+
+   Results:
+
+   - Total Latency: 19.86s
+   - LLM Latency: 9.52s
+   - Embedding Latency: 4.13s
+   - Validation Latency: 6.20s
+     Lesson: Increased thread count led to resource contention
+
+3. Balanced Resource Allocation
+   ```
+   num_ctx: 1024
+   num_gpu: 8
+   num_thread: 4
+   ```
+   Results:
+   - Total Latency: 25.51s
+   - LLM Latency: 15.26s
+   - Embedding Latency: 4.10s
+   - Validation Latency: 6.15s
+     Lesson: Reduced GPU layers actually increased latency
+
+### Key Findings
+
+1. Default Parameters Optimal
+
+   ```
+   num_ctx: 2048
+   num_gpu: 1
+   num_thread: 4
+   ```
+
+   Results:
+
+   - Total Latency: 12.35s
+   - LLM Latency: 10.13s
+   - Embedding Latency: 0.89s
+   - Validation Latency: 1.34s
+
+2. Performance Insights:
+   - Default Mistral-7B parameters are well-tuned for our use case
+   - Increasing GPU layers degraded performance
+   - Higher thread counts led to resource contention
+   - Classification results remained consistent across tests
+
+### Recommendations
+
+1. Short-term Optimizations:
+
+   - Implement response caching for repeated queries
+   - Add batch processing capabilities
+   - Optimize connection pooling
+   - Add detailed performance monitoring
+
+2. Infrastructure Considerations:
+
+   - Maintain current GPU configuration
+   - Focus on API-level optimizations
+   - Consider distributed processing for batch operations
+   - Implement warm-up strategies
+
+3. Monitoring Needs:
+   - Track GPU memory usage
+   - Monitor thread utilization
+   - Log classification latencies
+   - Measure cache hit rates
+
 ## Optimization Status
 
 ### Current Optimizations

@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """Script to run benchmarks and generate a performance report."""
 
-from tests.benchmark_classifier import run_benchmarks, save_benchmark_results
-import asyncio
 from datetime import datetime
-import psutil
-import GPUtil
+import asyncio
+from tests.benchmark_classifier import run_benchmarks, save_benchmark_results
 import os
 import sys
 from pathlib import Path
 
 # Add project root to Python path
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.absolute()
 sys.path.insert(0, str(project_root))
 
 

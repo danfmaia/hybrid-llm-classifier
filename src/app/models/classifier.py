@@ -206,7 +206,20 @@ class HybridClassifier:
                     timeout=timeout
                 )
                 response.raise_for_status()
-                return await response.json()
+
+                # Handle streaming response
+                if data.get("stream", False):
+                    full_response = ""
+                    async for line in response.aiter_lines():
+                        try:
+                            chunk = json.loads(line)
+                            if chunk.get("response"):
+                                full_response += chunk["response"]
+                        except json.JSONDecodeError:
+                            continue
+                    return {"response": full_response}
+                else:
+                    return response.json()
 
         except Exception as e:
             logger.error("API request failed: %s", str(e))
@@ -333,49 +346,82 @@ class HybridClassifier:
         Raises:
             Exception: If classification fails
         """
-        prompt = f"""
-        Classify the following legal document into one of these categories:
-        {', '.join(self.LEGAL_CATEGORIES)}
-
-        Document:
-        {text}
-
-        Respond with a JSON object containing:
-        {{"category": "<category>", "confidence": <float between 0 and 1>}}
-        """
-
         try:
-            # Make API call to Ollama with optimized parameters for GTX 1650
-            response = await self._make_api_request(
-                "/api/generate",
-                {
-                    "model": self.model_name,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "num_gpu": 1,
-                        "num_thread": 4,  # Match physical cores
-                        "num_ctx": 2048,  # Reduced context for 4GB VRAM
-                        "num_batch": 512,  # Adjusted for memory constraints
-                        "temperature": 0.1,
-                        "top_p": 0.9,
-                        "gpu_layers": 22  # Match Ollama's auto-configuration
-                    }
-                },
-                timeout=REQUEST_TIMEOUT
-            )
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.ollama_base_url}/api/generate",
+                    json={
+                        "model": self.model_name,
+                        "prompt": f"""Document to classify:
+{text}
 
-            # Parse LLM response from JSON string
-            try:
-                llm_response = json.loads(response["response"])
-            except (json.JSONDecodeError, KeyError) as e:
-                raise Exception("Invalid LLM response format") from e
+You MUST choose ONLY from these categories:
+- Contract
+- Court Filing
+- Legal Opinion
+- Legislation
+- Regulatory Document
 
-            return ClassificationResult(
-                category=llm_response["category"],
-                confidence=llm_response["confidence"],
-                validation_score=None
-            )
+Respond with ONLY this exact JSON format:
+{{"category": "<one of the categories above>", "confidence": <number between 0 and 1>}}""",
+                        "stream": False,
+                        "options": {
+                            "temperature": 0.1
+                        }
+                    },
+                    timeout=REQUEST_TIMEOUT
+                )
+                response.raise_for_status()
+                response_data = response.json()
+
+                logger.info("Raw response data: %s", response_data)
+                response_text = response_data.get("response", "").strip()
+                logger.info("Response text: %s", response_text)
+
+                try:
+                    # Try to parse the entire response first
+                    try:
+                        llm_response = json.loads(response_text)
+                        logger.info("Successfully parsed full response")
+                    except json.JSONDecodeError:
+                        # If that fails, try to find and parse just the JSON object
+                        import re
+                        json_pattern = r'\{[^}]+\}'
+                        json_match = re.search(json_pattern, response_text)
+                        if not json_match:
+                            raise Exception("No JSON object found in response")
+
+                        json_str = json_match.group(0)
+                        logger.info("Extracted JSON string: %s", json_str)
+                        llm_response = json.loads(json_str)
+                        logger.info("Successfully parsed extracted JSON")
+
+                    # Validate the response format
+                    if not isinstance(llm_response, dict):
+                        raise Exception("Response is not a dictionary")
+                    if "category" not in llm_response:
+                        raise Exception("Response missing 'category' field")
+                    if "confidence" not in llm_response:
+                        raise Exception("Response missing 'confidence' field")
+                    if not isinstance(llm_response["category"], str):
+                        raise Exception("'category' must be a string")
+                    if not isinstance(llm_response["confidence"], (int, float)):
+                        raise Exception("'confidence' must be a number")
+
+                    # Validate that the category is one of the allowed categories
+                    if llm_response["category"] not in self.LEGAL_CATEGORIES:
+                        raise Exception(
+                            f"Invalid category: {llm_response['category']}")
+
+                    return ClassificationResult(
+                        category=llm_response["category"],
+                        confidence=float(llm_response["confidence"]),
+                        validation_score=None
+                    )
+                except Exception as e:
+                    logger.error("Failed to parse response: %s", str(e))
+                    raise Exception(
+                        f"Invalid LLM response format: {str(e)}") from e
 
         except Exception as e:
             logger.error("LLM classification failed: %s", str(e))
