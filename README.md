@@ -33,14 +33,42 @@ src/
 tests/                # Test suite
 ```
 
+### Performance Characteristics
+
+#### Development Environment (Local)
+
+- Hardware Requirements:
+  - NVIDIA GPU with 4GB+ VRAM
+  - 4+ CPU cores
+  - 16GB+ system RAM
+- Expected Performance:
+  - Response Time: ~10s acceptable
+  - Throughput: 5-10 RPM
+  - Classification Accuracy: 85%
+
+#### Production Environment (AWS)
+
+1. Minimum Configuration (g5.xlarge):
+
+   - NVIDIA A10G GPU (24GB VRAM)
+   - Response Time: 3-4s
+   - Throughput: 30-40 RPM per instance
+   - Classification Accuracy: 85-90%
+
+2. Target Configuration (g5.2xlarge or higher):
+   - Response Time: ~2s
+   - Throughput: 150+ RPM (with load balancing)
+   - Classification Accuracy: 90-95%
+   - High Availability: 99.9%
+
 ### Key Components
 
 1. **Classification Engine**
 
    - Mistral-7B integration via Ollama
-   - GPU-accelerated inference (22 layers)
+   - GPU-accelerated inference
    - FAISS similarity validation
-   - Automatic retry logic
+   - Response caching (1-hour TTL)
 
 2. **API Layer**
    - Async endpoint structure
@@ -58,23 +86,25 @@ Current implementation status (Feb 7, 2025):
 - Basic FAISS validation layer
 - Performance monitoring
 
-✅ API Infrastructure
+🚧 In Progress (3-Day Sprint)
 
-- FastAPI application structure
-- JWT authentication
-- Rate limiting middleware
+Day 1 (Today):
 
-✅ Security Features
+- Optimizing Mistral-7B integration
+- Finalizing FAISS validation
+- Implementing response caching
 
-- Input validation
-- Error handling
-- Request logging
+Day 2:
 
-🚧 Performance Optimization
+- API security refinements
+- Performance optimization
+- Load testing implementation
 
-- Current: 11.37s response time
-- Target: <2s response time
-- Planned: Response streaming, caching
+Day 3:
+
+- AWS deployment setup
+- Documentation completion
+- Final testing & benchmarks
 
 ## 🛠️ Installation
 
@@ -153,45 +183,76 @@ make lint        # Run linting checks
 
 ### Performance Guidelines
 
-- Keep documents under 2,048 tokens for optimal performance
-- Batch requests: 5-10 documents recommended
-- Memory usage: ~3.5GB VRAM baseline
-- Expected latency: ~11.37s per request
+Development Environment:
+
+- Keep documents under 2,048 tokens
+- Expect ~10s response time
+- 5-10 requests per minute
+- Memory usage: ~3.5GB VRAM
+
+Production Environment:
+
+- AWS g5.xlarge or higher recommended
+- Load balancing for high throughput
+- Auto-scaling configuration
+- Regional deployment for latency optimization
 
 ## 📈 Performance
 
-Current metrics (see [BENCHMARKS.md](./BENCHMARKS.md) for details):
+See [BENCHMARKS.md](./BENCHMARKS.md) for detailed performance analysis and optimization experiments.
 
-- Average response time: 11.37s
+Development Environment (Current):
+
+- Average response time: ~11.37s
 - Classification accuracy: 85%
 - GPU memory usage: 3.5GB VRAM
 - Throughput: ~5 requests/minute
 
-Optimization roadmap:
+Production Targets (AWS g5.2xlarge):
 
-1. Response streaming implementation
-2. Request caching layer
-3. Batch processing optimization
-4. GPU kernel tuning
+- Response time: <2s
+- Throughput: 150+ RPM
+- Accuracy: 85-90%
+- High availability: 99.9%
+
+Optimization Roadmap:
+
+1. Response Caching
+
+   - In-memory caching for repeated queries
+   - Configurable TTL
+   - Cache hit monitoring
+
+2. Performance Optimization
+
+   - Response streaming
+   - Batch processing
+   - Memory usage optimization
+
+3. Infrastructure
+   - Docker containerization
+   - AWS deployment
+   - Load balancing setup
+   - Monitoring integration
 
 ## 🛣️ Roadmap
 
-1. **Short-term (Pre-deployment)**
+1. **Core Functionality** (Day 1)
 
-   - Implement response streaming
-   - Add request caching
-   - Optimize batch processing
+   - Optimize classification engine ✅
+   - Implement caching layer
+   - Document performance baselines
 
-2. **Medium-term**
+2. **API & Performance** (Day 2)
 
-   - Load balancing setup
-   - Memory optimization
-   - Warm-up strategies
+   - Security hardening
+   - Response optimization
+   - Load testing
 
-3. **Long-term**
-   - Distributed processing
-   - Custom GPU kernels
-   - Advanced caching
+3. **Production Ready** (Day 3)
+   - AWS deployment
+   - Documentation
+   - Final testing
 
 ## 📄 License
 

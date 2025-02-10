@@ -24,14 +24,118 @@
 
 ### API Performance
 
-| Metric              | Target  | Actual | Notes                             |
-| ------------------- | ------- | ------ | --------------------------------- |
-| Response Time (p95) | < 2s    | 11.37s | Single request, GPU-accelerated   |
-| LLM Latency         | N/A     | 5.84s  | Using 22 GPU layers               |
-| Embedding Latency   | N/A     | 2.21s  | With input size limiting          |
-| Validation Latency  | N/A     | 3.32s  | FAISS similarity search           |
-| Throughput          | 150 RPM | ~5 RPM | Current development configuration |
-| Error Rate          | < 0.1%  | < 1%   | Mostly connection/timeout related |
+| Metric              | Target    | Actual | Notes                             |
+| ------------------- | --------- | ------ | --------------------------------- |
+| Response Time (p95) | < 2s\*    | 11.37s | Single request, GPU-accelerated   |
+| LLM Latency         | N/A       | 5.84s  | Using 22 GPU layers               |
+| Embedding Latency   | N/A       | 2.21s  | With input size limiting          |
+| Validation Latency  | N/A       | 3.32s  | FAISS similarity search           |
+| Throughput          | 150 RPM\* | ~5 RPM | Current development configuration |
+| Error Rate          | < 0.1%    | < 1%   | Mostly connection/timeout related |
+
+\*Production targets with AWS g5.xlarge or higher instances
+
+## Environment-Specific Performance Targets
+
+### Development Environment (Local)
+
+- Hardware: Intel i5-9300H, GTX 1650 4GB, 31GB RAM
+- Expected Performance:
+  - Response Time: ~10s acceptable
+  - Throughput: 5-10 RPM
+  - GPU Memory Usage: 3.5GB VRAM
+  - Classification Accuracy: 85%
+
+### Production Environment (AWS)
+
+1. g5.xlarge (Minimum Recommended)
+
+   - Hardware: NVIDIA A10G GPU (24GB VRAM)
+   - Expected Performance:
+     - Response Time: 3-4s
+     - Throughput: 30-40 RPM per instance
+     - GPU Memory Usage: ~8GB VRAM
+     - Classification Accuracy: 85-90%
+
+2. g5.2xlarge or Higher (Target Configuration)
+   - Expected Performance:
+     - Response Time: ~2s
+     - Throughput: 150+ RPM (with load balancing)
+     - GPU Memory Usage: 12-16GB VRAM
+     - Classification Accuracy: 90-95%
+
+### Scaling Strategy
+
+1. Vertical Scaling (Single Instance)
+
+   - Current: GTX 1650 (4GB VRAM)
+   - Target: NVIDIA A10G (24GB VRAM)
+   - Impact: 3-4x performance improvement
+
+2. Horizontal Scaling (Multiple Instances)
+   - Load Balancer + 3-4 g5.xlarge instances
+   - Expected Throughput: 150+ RPM
+   - High Availability: 99.9% uptime
+   - Auto-scaling based on demand
+
+### Performance Optimization Roadmap
+
+1. Development Phase (Local)
+
+   - Focus on code quality and correctness
+   - Optimize within hardware constraints
+   - Implement and test caching mechanisms
+   - Profile and optimize memory usage
+
+2. Pre-Production Phase (AWS)
+
+   - Deploy to g5.xlarge for baseline
+   - Implement load balancing
+   - Enable auto-scaling
+   - Optimize GPU memory usage
+   - Fine-tune model parameters
+
+3. Production Phase
+   - Scale to multiple g5 instances
+   - Implement regional deployment
+   - Enable request caching
+   - Monitor and optimize costs
+
+### Cost-Performance Trade-offs
+
+1. Development (Local)
+
+   - Zero cloud costs
+   - Higher latency acceptable
+   - Limited by hardware
+
+2. Production (AWS g5.xlarge)
+
+   - Cost: ~$1.006/hour per instance
+   - Better performance/cost ratio
+   - Auto-scaling for cost optimization
+
+3. Production (AWS g5.2xlarge)
+   - Cost: ~$2.012/hour per instance
+   - Optimal performance
+   - Required for target RPM
+
+### Monitoring and Optimization
+
+1. Key Metrics to Track
+
+   - Response time distribution
+   - GPU memory utilization
+   - Request queue length
+   - Cache hit rates
+   - Cost per inference
+
+2. Optimization Levers
+   - Instance type selection
+   - Number of instances
+   - Cache size and TTL
+   - Batch size optimization
+   - Load balancer configuration
 
 ### Resource Utilization
 
