@@ -4,31 +4,30 @@ import time
 from collections import defaultdict
 from typing import Callable, Dict, List
 from fastapi import Request, Response
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 from ..config import get_settings
 
+# Rate limit settings
+REQUESTS_PER_MINUTE = 60
+WINDOW_SIZE = 60  # seconds
+
+# Paths that don't require rate limiting
+EXCLUDED_PATHS = {
+    "/docs",
+    "/openapi.json",
+    "/health"
+}
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """
-    Rate limiting middleware to prevent API abuse.
+    """Middleware for rate limiting using a rolling window approach."""
 
-    Uses a rolling window approach to track requests per client IP.
-    Configurable through settings for requests per window and window size.
-    """
-
-    # Endpoints that should not be rate limited
-    EXCLUDED_PATHS = {
-        "/api/v1/auth/token",  # Token endpoint
-        "/docs",  # API documentation
-        "/openapi.json",  # OpenAPI schema
-        "/health",  # Health check endpoint
-    }
-
-    def __init__(self, app: ASGIApp):
-        """Initialize the rate limiter with default settings."""
+    def __init__(self, app=None):
         super().__init__(app)
-        self.requests: Dict[str, List[float]] = defaultdict(list)
+        # Store timestamps of requests per client
+        self.request_history: Dict[str, List[float]] = defaultdict(list)
         self.settings = get_settings()
         self._test_mode = False
         self._test_counter = 0
@@ -47,63 +46,48 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def reset(self) -> None:
         """Reset the rate limiter state."""
-        self.requests.clear()
+        self.request_history.clear()
         if self._test_mode:
             self._test_counter += 1
 
     def should_rate_limit(self, request: Request) -> bool:
-        """
-        Determine if a request should be rate limited.
+        """Check if request should be rate limited."""
+        return request.url.path not in EXCLUDED_PATHS
 
-        Args:
-            request: The incoming request
+    def clean_old_requests(self, client_id: str, current_time: float):
+        """Remove requests older than the window size."""
+        cutoff = current_time - WINDOW_SIZE
+        while (self.request_history[client_id] and
+               self.request_history[client_id][0] < cutoff):
+            self.request_history[client_id].pop(0)
 
-        Returns:
-            bool: True if the request should be rate limited
-        """
-        path = request.url.path.rstrip(
-            "/")  # Remove trailing slash for comparison
-        return path not in self.EXCLUDED_PATHS
-
-    async def dispatch(
-        self, request: Request, call_next: Callable
-    ) -> Response:
-        """
-        Process each request through the rate limiter.
-
-        Args:
-            request: The incoming HTTP request
-            call_next: The next middleware/endpoint to call
-
-        Returns:
-            Response: The HTTP response
-        """
+    async def dispatch(self, request: Request, call_next):
+        """Process each request."""
         # Skip rate limiting for excluded paths
-        if not self.should_rate_limit(request):
-            return await call_next(request)
+        if self.should_rate_limit(request):
+            # Clean old requests
+            self.clean_old_requests(request.client.host, time.time())
 
-        # In test mode, use a unique client ID for each test case
-        client_ip = f"test_client_{self._test_counter}" if self._test_mode else request.client.host
+            # Get client identifier
+            client_id = request.client.host
 
-        # Clean up old requests outside the window
-        now = time.time()
-        window = self.settings.rate_limit_window_seconds
-        self.requests[client_ip] = [
-            req_time for req_time in self.requests[client_ip]
-            if now - req_time < window
-        ]
+            # Get current time
+            current_time = time.time()
 
-        # Check if rate limit is exceeded
-        if len(self.requests[client_ip]) >= self.settings.rate_limit_requests:
-            return Response(
-                content='{"detail":"Rate limit exceeded"}',
-                status_code=429,
-                media_type="application/json"
-            )
+            # Get requests in the current window
+            client_requests = self.request_history.get(client_id, [])
+            client_requests = [
+                t for t in client_requests if current_time - t <= WINDOW_SIZE]
 
-        # Add current request timestamp
-        self.requests[client_ip].append(now)
+            # Check if rate limit is exceeded
+            if len(client_requests) >= REQUESTS_PER_MINUTE:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many requests"}
+                )
 
-        # Process the request
-        response = await call_next(request)
-        return response
+            # Add current request
+            client_requests.append(current_time)
+            self.request_history[client_id] = client_requests
+
+        return await call_next(request)

@@ -1,0 +1,35 @@
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.5
+pytest-cov>=4.1.0
+pytest-watch>=4.2.0
+pytest-benchmark>=4.0.0
+pytest-xdist>=3.5.0
+
+# Linting and formatting
+black>=23.11.0
+isort>=5.12.0
+mypy>=1.7.1
+flake8>=7.0.0
+pylint>=3.0.2
+
+# Type checking
+types-aiohttp>=3.9.1
+types-pytest>=7.4.0
+types-setuptools>=69.0.0
+
+# Development tools
+ipython>=8.12.0
+ipdb>=0.13.0
+pre-commit>=3.6.0
+
+# Documentation
+mkdocs>=1.5.0
+mkdocs-material>=9.5.0
+mkdocstrings>=0.24.0
+
+# Benchmarking
+memory-profiler>=0.61.0
+line-profiler>=4.1.1
+psutil>=5.9.6
+gputil>=1.4.0 

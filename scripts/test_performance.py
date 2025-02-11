@@ -35,7 +35,7 @@ async def main():
     print("\nInitializing classifier...")
     classifier = HybridClassifier(
         ollama_base_url="http://localhost:11434",
-        model_name="legal-classifier",  # Using our optimized model
+        model_name="mistral",  # Using default Mistral model
         embedding_dim=384
     )
 

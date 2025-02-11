@@ -35,4 +35,4 @@ Legislation
 Regulatory Document
 
 RESPOND WITH ONLY THIS JSON:
-{"category": "<category>", "confidence": <number>}""" 
+{"category": "<category>", "confidence": <number>}"""

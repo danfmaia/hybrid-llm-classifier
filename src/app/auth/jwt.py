@@ -6,7 +6,7 @@ from jose import JWTError, jwt
 from pydantic import BaseModel
 from ..config import get_settings
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 
 class Token(BaseModel):

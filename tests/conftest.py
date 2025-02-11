@@ -35,6 +35,15 @@ def test_app(rate_limiter: RateLimitMiddleware) -> FastAPI:
     test_app.router = app.router
     test_app.middleware_stack = None  # Clear existing middleware
     test_app.add_middleware(RateLimitMiddleware)
+    # Build middleware stack
+    test_app.build_middleware_stack()
+    # Replace the rate limiter instance with our configured one
+    for middleware in test_app.middleware_stack.middlewares:
+        if isinstance(middleware, RateLimitMiddleware):
+            middleware.test_mode = rate_limiter.test_mode
+            middleware.requests = rate_limiter.requests
+            middleware._test_counter = rate_limiter._test_counter
+            break
     return test_app
 
 

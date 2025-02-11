@@ -1,111 +1,120 @@
-"""Integration tests for authentication and rate limiting middleware."""
+"""Test authentication and rate limiting middleware."""
 
-from typing import Any
+import pytest
+import asyncio
+from fastapi import FastAPI, Depends
 from fastapi.testclient import TestClient
-from unittest.mock import patch, AsyncMock
+from app.middleware.auth import AuthMiddleware
+from app.middleware.rate_limit import RateLimitMiddleware, REQUESTS_PER_MINUTE
+from app.utils.auth import generate_token
 
 
-def test_auth_no_token(test_client: TestClient) -> None:
-    """Test that protected endpoints require authentication."""
-    response = test_client.post(
-        "/api/v1/classify/", json={"text": "test document"})
+@pytest.fixture
+def test_app():
+    """Create test FastAPI application."""
+    app = FastAPI()
+    app.add_middleware(AuthMiddleware)
+    app.add_middleware(RateLimitMiddleware)
+
+    @app.get("/api/v1/test-auth")
+    async def test_auth():
+        return {"message": "Authenticated"}
+
+    @app.get("/api/v1/test-rate-limit")
+    async def test_rate_limit():
+        return {"message": "Success"}
+
+    return app
+
+
+@pytest.fixture
+def test_client(test_app):
+    """Create test client."""
+    return TestClient(test_app)
+
+
+@pytest.fixture
+def valid_token():
+    """Generate a valid token for testing."""
+    return generate_token({"user_id": "test_user"})
+
+
+@pytest.mark.asyncio
+async def test_auth_no_token(test_client):
+    """Test request without token."""
+    response = test_client.get("/api/v1/test-auth")
     assert response.status_code == 401
-    assert "detail" in response.json()
+    assert response.json()["detail"] == "No authentication token provided"
 
 
-def test_auth_invalid_token(test_client: TestClient) -> None:
-    """Test that invalid tokens are rejected."""
-    headers = {"Authorization": "Bearer invalid_token"}
-    response = test_client.post(
-        "/api/v1/classify/",
-        headers=headers,
-        json={"text": "test document"}
+@pytest.mark.asyncio
+async def test_auth_invalid_token(test_client):
+    """Test request with invalid token."""
+    response = test_client.get(
+        "/api/v1/test-auth",
+        headers={"Authorization": "Bearer invalid_token"}
     )
     assert response.status_code == 401
-    assert "detail" in response.json()
+    assert response.json()["detail"] == "Invalid authentication token"
 
 
-def test_auth_token_generation(test_client: TestClient) -> None:
-    """Test token generation endpoint."""
-    response = test_client.post(
-        "/api/v1/auth/token",
-        data={"username": "testuser", "password": "testpass"}
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "access_token" in data
-    assert "token_type" in data
-    assert data["token_type"] == "bearer"
+@pytest.mark.asyncio
+async def test_auth_token_generation():
+    """Test token generation."""
+    token = generate_token({"user_id": "test_user"})
+    assert isinstance(token, str)
+    assert len(token) > 0
 
 
-def test_rate_limiting(test_client: TestClient, test_settings: Any) -> None:
-    """Test that rate limiting middleware works."""
-    # Get a valid token first
-    auth_response = test_client.post(
-        "/api/v1/auth/token",
-        data={"username": "testuser", "password": "testpass"}
-    )
-    token = auth_response.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
+@pytest.mark.asyncio
+async def test_rate_limiting(test_client, valid_token):
+    """Test rate limiting."""
     # Make requests up to the limit
-    for _ in range(test_settings.rate_limit_requests):
-        response = test_client.get("/api/v1/test-rate-limit", headers=headers)
-        # Endpoint doesn't exist, but should still be rate limited
-        assert response.status_code == 404
+    for _ in range(REQUESTS_PER_MINUTE):
+        response = test_client.get(
+            "/api/v1/test-rate-limit",
+            headers={"Authorization": f"Bearer {valid_token}"}
+        )
+        assert response.status_code == 200
 
     # Next request should be rate limited
-    response = test_client.get("/api/v1/test-rate-limit", headers=headers)
+    response = test_client.get(
+        "/api/v1/test-rate-limit",
+        headers={"Authorization": f"Bearer {valid_token}"}
+    )
     assert response.status_code == 429
-    assert "detail" in response.json()
-    assert "Rate limit exceeded" in response.json()["detail"]
+    assert "Too many requests" in response.json()["detail"]
 
 
-def test_protected_endpoint_with_valid_token(test_client: TestClient) -> None:
-    """Test accessing protected endpoint with valid token."""
-    # Get a valid token
-    auth_response = test_client.post(
-        "/api/v1/auth/token",
-        data={"username": "testuser", "password": "testpass"}
+@pytest.mark.asyncio
+async def test_protected_endpoint_with_valid_token(test_client, valid_token):
+    """Test protected endpoint with valid token."""
+    response = test_client.get(
+        "/api/v1/test-auth",
+        headers={"Authorization": f"Bearer {valid_token}"}
     )
-    token = auth_response.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
+    assert response.status_code == 200
+    assert response.json()["message"] == "Authenticated"
 
-    # Mock the classifier to avoid actual API calls
-    with patch("app.models.classifier.HybridClassifier.classify", new_callable=AsyncMock) as mock_classify:
-        mock_classify.side_effect = NotImplementedError(
-            "Classification not yet implemented")
 
-        # Access protected endpoint
-        response = test_client.post(
-            "/api/v1/classify/",
-            headers=headers,
-            json={"text": "test document"}
+@pytest.mark.asyncio
+async def test_batch_request_with_rate_limit(test_client, valid_token):
+    """Test batch request handling with rate limit."""
+    # Make concurrent requests
+    async def make_request():
+        return test_client.get(
+            "/api/v1/test-rate-limit",
+            headers={"Authorization": f"Bearer {valid_token}"}
         )
-        assert response.status_code == 501  # Should return Not Implemented
 
+    tasks = [make_request() for _ in range(REQUESTS_PER_MINUTE + 5)]
+    responses = await asyncio.gather(*tasks, return_exceptions=True)
 
-def test_batch_request_with_rate_limit(test_client: TestClient) -> None:
-    """Test batch requests respect rate limiting."""
-    # Get a valid token
-    auth_response = test_client.post(
-        "/api/v1/auth/token",
-        data={"username": "testuser", "password": "testpass"}
-    )
-    token = auth_response.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
+    # Count response types
+    success_count = sum(1 for r in responses if getattr(
+        r, 'status_code', None) == 200)
+    rate_limited_count = sum(
+        1 for r in responses if getattr(r, 'status_code', None) == 429)
 
-    # Prepare batch request data
-    batch_data = [
-        {"text": f"document {i}", "metadata": {"id": i}}
-        for i in range(5)
-    ]
-
-    # Send batch request
-    response = test_client.post(
-        "/api/v1/classify/batch",
-        headers=headers,
-        json=batch_data
-    )
-    # Note: Will return 501 Not Implemented until we implement the classifier
-    assert response.status_code in (200, 501)
+    assert success_count == REQUESTS_PER_MINUTE
+    assert rate_limited_count == 5
