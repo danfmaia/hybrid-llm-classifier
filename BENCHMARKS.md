@@ -12,7 +12,65 @@
   - Ollama (Mistral-7B)
   - FAISS-CPU 1.7.4
 
-## Current Results (as of Feb 7, 2025)
+## Latest Benchmark Results (Feb 11, 2025 - 15:35)
+
+### Single Document Performance
+
+- Small documents (60 chars): ~22s response time
+- Medium documents (110 chars): ~44s response time
+- Success rate: 100%
+- Confidence scores: 0.95-1.00
+
+### Batch Processing Performance
+
+- 5 documents: 88.20s total (17.64s per document)
+- 10 documents: 143.57s total (14.36s per document)
+- Improved efficiency with larger batches
+
+### Concurrent User Performance
+
+- 2 users (4 requests): ~50s total
+- 5 users (5 requests): ~36s total
+- Better performance with increased concurrency
+
+### Overall Metrics
+
+- Average Response Time: 33.18s
+- 95th Percentile Response Time: 44.00s
+- Throughput: 0.03 requests/second (~1.8 RPM)
+- Success Rate: 100%
+- Error Rate: 0%
+
+### Analysis for Interview Discussion
+
+1. Performance Gaps:
+
+   - Response Time: 33.18s vs 2s target
+   - Throughput: 1.8 RPM vs 150 RPM target
+   - GPU Utilization: Not optimal
+
+2. Positive Aspects:
+
+   - 100% Success Rate
+   - High Confidence Scores
+   - Improved Performance with Concurrency
+   - Efficient Batch Processing
+
+3. Optimization Opportunities:
+
+   - Parallel Processing for Batch Requests
+   - Request Caching
+   - GPU Layer Optimization
+   - Connection Pooling
+   - Load Balancing
+
+4. Production Scaling Strategy:
+   - Move to AWS g5.xlarge/g5.2xlarge
+   - Implement Load Balancing
+   - Enable Auto-scaling
+   - Regional Deployment
+
+## Historical Results (Feb 7, 2025)
 
 ### Classification Performance
 
@@ -34,6 +92,46 @@
 | Error Rate          | < 0.1%    | < 1%   | Mostly connection/timeout related |
 
 \*Production targets with AWS g5.xlarge or higher instances
+
+### Known Issues and Workarounds
+
+#### GPU Utilization Challenge
+
+Current Status:
+
+- GPU Detection: ✅ System detects NVIDIA GTX 1650
+- CUDA Support: ✅ CUDA 12.6 available
+- Current Issue: Limited GPU utilization (~32%, primarily X server)
+- Impact: Higher response times than target (11.37s vs 2s goal)
+
+Attempted Solutions:
+
+1. Ollama Configuration:
+
+   - Modified GPU parameters (num_gpu, num_thread)
+   - Adjusted batch and context settings
+   - Set explicit CUDA environment variables
+
+2. System Configuration:
+   - Verified CUDA libraries
+   - Set NVIDIA_VISIBLE_DEVICES
+   - Configured GPU memory allocation
+
+Workaround Strategy:
+
+- Continue with current performance (11.37s response time)
+- Focus on other optimization areas:
+  - Request caching
+  - Batch processing
+  - Connection pooling
+  - Load balancing preparation
+
+Future Investigation (Post-Interview):
+
+- Explore alternative GPU configuration approaches
+- Consider containerized deployment
+- Test with different CUDA versions
+- Evaluate cloud GPU options (AWS g5.xlarge)
 
 ## Environment-Specific Performance Targets
 

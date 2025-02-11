@@ -1,7 +1,7 @@
 # Hybrid Legal Document Classifier
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104.1+-blue.svg)](https://fastapi.tiangolo.com)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -15,11 +15,11 @@ A production-ready zero-shot legal document classification system powered by Mis
   - FastAPI async endpoints with comprehensive middleware
   - JWT authentication and rate limiting
   - Performance monitoring and logging
-- **Current Performance** (as of Feb 7, 2025):
-  - Response time: ~11.37s per request
-  - Classification accuracy: 85% on initial testing
-  - GPU utilization: 22 layers on GPU
-  - Throughput: ~5 requests per minute
+- **Current Performance** (as of Feb 11, 2025):
+  - Response time: ~33.18s per request
+  - Classification accuracy: 100% on latest tests
+  - GPU utilization: Not optimal
+  - Throughput: ~1.8 requests per minute
 
 ## 🏗️ Technical Architecture
 
@@ -42,9 +42,9 @@ tests/                # Test suite
   - 4+ CPU cores
   - 16GB+ system RAM
 - Expected Performance:
-  - Response Time: ~10s acceptable
-  - Throughput: 5-10 RPM
-  - Classification Accuracy: 85%
+  - Response Time: ~33s average
+  - Throughput: 1-2 RPM
+  - Classification Accuracy: 100%
 
 #### Production Environment (AWS)
 
@@ -106,7 +106,7 @@ Day 3:
 - Documentation completion
 - Final testing & benchmarks
 
-## 🛠️ Installation
+## 🛠️ Development Setup
 
 ### Prerequisites
 
@@ -114,8 +114,9 @@ Day 3:
 - 4+ CPU cores
 - 16GB+ system RAM
 - Python 3.10+
+- Conda (recommended for environment management)
 
-### Steps
+### Installation
 
 1. **Clone the repository**
 
@@ -127,9 +128,11 @@ cd hybrid-llm-classifier
 2. **Set up the environment**
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-pip install -r requirements.txt
+# Create and activate environment
+make setup
+
+# Install development dependencies
+make install-dev
 ```
 
 3. **Install and start Ollama**
@@ -137,49 +140,81 @@ pip install -r requirements.txt
    - Pull Mistral model: `ollama pull mistral`
    - Verify GPU support: `nvidia-smi`
 
-## 🚀 Quick Start
+### Development Commands
 
-1. **Start the API server**
+We use `make` to standardize development commands. Here are the available targets:
 
-```bash
-uvicorn app.main:app --reload
-```
-
-2. **Get authentication token**
-
-```python
-import httpx
-
-async with httpx.AsyncClient() as client:
-    auth_response = await client.post(
-        "http://localhost:8000/api/v1/auth/token",
-        data={"username": "your_username", "password": "your_password"}
-    )
-    token = auth_response.json()["access_token"]
-```
-
-3. **Make classification request**
-
-```python
-    response = await client.post(
-        "http://localhost:8000/api/v1/classify",
-        headers={"Authorization": f"Bearer {token}"},
-        json={
-            "text": "Your legal document text here"
-        }
-    )
-    result = response.json()
-```
-
-## 🧪 Development
-
-### Running Tests
+#### Testing
 
 ```bash
-make test        # Run unit tests
-make test-cov    # Run tests with coverage
-make lint        # Run linting checks
+# Run basic tests
+make test
+
+# Run tests with coverage report
+make test-coverage
+
+# Run tests in watch mode (auto-rerun on changes)
+make test-watch
+
+# Run tests with verbose output
+make test-verbose
 ```
+
+#### Performance Testing
+
+```bash
+# Run full benchmark suite
+make benchmark
+
+# Run continuous benchmark monitoring
+make benchmark-watch
+
+# Run memory and line profiling
+make benchmark-profile
+```
+
+#### Code Quality
+
+```bash
+# Format code (black + isort)
+make format
+
+# Run all linters
+make lint
+```
+
+#### Development Server
+
+```bash
+# Start development server with hot reload
+make run
+```
+
+#### Cleanup
+
+```bash
+# Remove all build artifacts and cache files
+make clean
+```
+
+For a complete list of available commands:
+
+```bash
+make help
+```
+
+### Test Coverage
+
+Current test suite includes:
+
+- Unit tests for core classification
+- Integration tests for API endpoints
+- Authentication and rate limiting tests
+- Performance metrics validation
+- Error handling scenarios
+- Benchmark tests
+
+All tests are async-compatible and use pytest-asyncio for proper async testing.
 
 ### Performance Guidelines
 
@@ -203,16 +238,16 @@ See [BENCHMARKS.md](./BENCHMARKS.md) for detailed performance analysis and optim
 
 Development Environment (Current):
 
-- Average response time: ~11.37s
-- Classification accuracy: 85%
-- GPU memory usage: 3.5GB VRAM
-- Throughput: ~5 requests/minute
+- Average response time: ~33.18s
+- Classification accuracy: 100%
+- GPU utilization: Not optimal
+- Throughput: ~1.8 requests/minute
 
 Production Targets (AWS g5.2xlarge):
 
 - Response time: <2s
 - Throughput: 150+ RPM
-- Accuracy: 85-90%
+- Accuracy: 90-95%
 - High availability: 99.9%
 
 Optimization Roadmap:
