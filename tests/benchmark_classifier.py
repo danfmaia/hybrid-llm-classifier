@@ -9,6 +9,8 @@ import json
 import aiohttp
 import numpy as np
 from prometheus_client import CollectorRegistry, Counter, Histogram, Gauge
+import sys
+import os
 
 # Test documents of varying sizes
 SMALL_DOC = """This contract agreement is made between Party A and Party B."""
@@ -163,17 +165,24 @@ async def run_benchmarks(
         # Get auth token
         print("\nGetting authentication token...")
         try:
+            # Use URLEncoded form data
+            form_data = {
+                "username": auth["username"],
+                "password": auth["password"],
+                "grant_type": "password"
+            }
+            headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
             async with client.post(
                 f"{base_url}/api/v1/auth/token",
-                data=auth,
-                headers={"Content-Type": "application/x-www-form-urlencoded"}
+                data=form_data,
+                headers=headers
             ) as response:
                 if response.status != 200:
                     print(
                         f"Authentication failed with status {response.status}")
-                    response_data = await response.json()
-                    print(
-                        f"Error: {response_data.get('detail', 'Unknown error')}")
+                    response_data = await response.text()
+                    print(f"Error: {response_data}")
                     return BenchmarkResult(
                         avg_response_time=0.0,
                         p95_response_time=0.0,
@@ -297,16 +306,37 @@ async def run_benchmarks(
 
 
 def save_benchmark_results(results: BenchmarkResult, output_file: str) -> None:
-    """Save benchmark results to a file."""
-    with open(output_file, 'w') as f:
-        json.dump({
+    """Save benchmark results to a JSON file."""
+    result_dict = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "metrics": {
             "avg_response_time": results.avg_response_time,
             "p95_response_time": results.p95_response_time,
             "throughput": results.throughput,
             "error_rate": results.error_rate,
+            "cpu_usage": results.cpu_usage,
+            "memory_usage": results.memory_usage,
             "success_rate": results.success_rate,
             "category_distribution": results.category_distribution
-        }, f, indent=2)
+        },
+        "environment": {
+            "python_version": sys.version,
+            "platform": sys.platform,
+            "cpu_count": os.cpu_count()
+        }
+    }
+
+    with open(output_file, 'w') as f:
+        json.dump(result_dict, f, indent=2)
+
+    print("\nBenchmark Summary:")
+    print(f"Average Response Time: {results.avg_response_time:.2f}s")
+    print(f"95th Percentile Response Time: {results.p95_response_time:.2f}s")
+    print(f"Throughput: {results.throughput:.2f} requests/minute")
+    print(f"Success Rate: {results.success_rate * 100:.1f}%")
+    print(f"Error Rate: {results.error_rate * 100:.1f}%")
+    print(f"CPU Usage: {results.cpu_usage:.1f}%")
+    print(f"Memory Usage: {results.memory_usage:.1f} MB")
 
 
 if __name__ == "__main__":

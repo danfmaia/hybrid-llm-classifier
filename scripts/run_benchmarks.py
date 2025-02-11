@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Script to run benchmarks and generate a performance report."""
 
-from datetime import datetime
-import asyncio
 from tests.benchmark_classifier import run_benchmarks, save_benchmark_results
+import asyncio
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # Add project root to Python path
@@ -33,6 +33,7 @@ async def main():
 
     except Exception as e:
         print(f"Error during benchmark: {e}")
+        raise  # Re-raise the exception for debugging
 
 
 if __name__ == "__main__":

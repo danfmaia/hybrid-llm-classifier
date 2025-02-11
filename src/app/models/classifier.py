@@ -64,22 +64,21 @@ CONNECTION_TIMEOUT = 10.0  # seconds
 REQUEST_TIMEOUT = 30.0  # seconds
 
 
-@dataclass
-class PerformanceMetrics:
-    """Container for detailed performance metrics of a classification operation.
+class PerformanceMetrics(BaseModel):
+    """Performance metrics for classification."""
 
-    Current averages:
-    - LLM latency: ~5.84s
-    - Embedding latency: ~2.21s
-    - Validation latency: ~3.32s
-    - Total latency: ~11.37s
-    """
-    llm_latency: float
-    embedding_latency: float
-    validation_latency: float
-    total_latency: float
-    validation_score: float
-    document_length: int
+    llm_latency: float = 0.0
+    embedding_latency: float = 0.0
+    validation_latency: float = 0.0
+    total_latency: float = 0.0
+    validation_score: float = 0.0
+    document_length: int = 0
+
+
+class SimilarDocument(BaseModel):
+    """Model for similar document results."""
+    category: str
+    similarity: float
 
 
 class ClassificationResult(BaseModel):
@@ -92,12 +91,17 @@ class ClassificationResult(BaseModel):
     confidence: float
     subcategories: Optional[List[Dict[str, float]]] = None
     validation_score: Optional[float] = None
-    similar_documents: Optional[List[Dict[str, float]]] = None
+    similar_documents: Optional[List[SimilarDocument]] = None
     performance_metrics: Optional[PerformanceMetrics] = None
 
 
 class ValidationError(Exception):
     """Custom exception for validation errors with detailed error tracking."""
+    pass
+
+
+class ClassificationError(Exception):
+    """Exception raised when classification fails."""
     pass
 
 
@@ -206,6 +210,9 @@ class HybridClassifier:
                     timeout=timeout
                 )
                 response.raise_for_status()
+                response_data = response.json()
+                logger.info("Raw response data: %r", response_data)
+                logger.info("Response text: %r", response.text)
 
                 # Handle streaming response
                 if data.get("stream", False):
@@ -218,120 +225,60 @@ class HybridClassifier:
                         except json.JSONDecodeError:
                             continue
                     return {"response": full_response}
-                else:
-                    return response.json()
+
+                # Handle regular response
+                return response_data
 
         except Exception as e:
             logger.error("API request failed: %s", str(e))
             raise Exception(f"API request failed: {str(e)}") from e
 
-    async def classify(self, text: str) -> ClassificationResult:
-        """
-        Classify a legal document using hybrid approach.
-
-        Args:
-            text: The document text to classify
-
-        Returns:
-            ClassificationResult with category and confidence scores
-
-        Raises:
-            Exception: If classification fails
-        """
+    async def classify(self, text: str, validate: bool = True) -> ClassificationResult:
+        """Classify a document using the hybrid approach."""
         start_time = time.perf_counter()
-        doc_length = len(text)
+        performance_metrics = PerformanceMetrics(document_length=len(text))
 
         try:
-            # Get initial classification from LLM
+            # Get LLM classification
             llm_start = time.perf_counter()
             llm_result = await self._get_llm_classification(text)
-            llm_latency = time.perf_counter() - llm_start
+            llm_end = time.perf_counter()
+            performance_metrics.llm_latency = llm_end - llm_start
 
-            # Validate using embeddings
-            validation_start = time.perf_counter()
-            validation_score, similar_docs = await self._validate_classification(
-                text, llm_result.category)
-            validation_latency = time.perf_counter() - validation_start
+            # Validate classification if requested and index is not empty
+            validation_score = None
+            similar_documents = None
+            if validate and self.index.ntotal > 0:
+                validation_start = time.perf_counter()
+                validation_score, similar_docs = await self._validate_classification(text, llm_result.category)
+                validation_end = time.perf_counter()
+                performance_metrics.validation_latency = validation_end - validation_start
+                performance_metrics.validation_score = validation_score
+            else:
+                # Set default validation score when index is empty
+                validation_score = 0.5
+                similar_docs = []
+                performance_metrics.validation_score = validation_score
 
-            # Update result with validation data
-            llm_result.validation_score = validation_score
-            llm_result.similar_documents = similar_docs
+            # Calculate total latency
+            end_time = time.perf_counter()
+            performance_metrics.total_latency = end_time - start_time
 
-            # Adjust confidence based on validation
-            llm_result.confidence = self._compute_final_confidence(
-                llm_result.confidence, validation_score)
-
-            # Record performance metrics
-            total_latency = time.perf_counter() - start_time
-            llm_result.performance_metrics = PerformanceMetrics(
-                llm_latency=llm_latency,
-                embedding_latency=validation_latency * 0.4,  # Estimated split
-                validation_latency=validation_latency * 0.6,  # Estimated split
-                total_latency=total_latency,
-                validation_score=validation_score,
-                document_length=doc_length
-            )
-
-            # Update monitoring metrics
-            CLASSIFICATION_REQUESTS.labels(
+            # Create and return the final result
+            result = ClassificationResult(
                 category=llm_result.category,
-                status="success"
-            ).inc()
-            CLASSIFICATION_LATENCY.labels(step="total").observe(total_latency)
-            CLASSIFICATION_LATENCY.labels(step="llm").observe(llm_latency)
-            CLASSIFICATION_LATENCY.labels(
-                step="validation").observe(validation_latency)
-            VALIDATION_SCORES.labels(
-                category=llm_result.category).observe(validation_score)
-
-            logger.info(
-                "Classification successful",
-                extra={
-                    "category": llm_result.category,
-                    "confidence": llm_result.confidence,
-                    "validation_score": validation_score,
-                    "latency": total_latency,
-                    "document_length": doc_length
-                }
+                confidence=llm_result.confidence,
+                validation_score=validation_score if validate else None,
+                similar_documents=similar_docs if validate else None,
+                performance_metrics=performance_metrics
             )
-
-            return llm_result
+            logger.info("Classification successful")
+            return result
 
         except Exception as e:
-            CLASSIFICATION_REQUESTS.labels(
-                category="unknown",
-                status="error"
-            ).inc()
-            logger.error(
-                "Classification failed: %s",
-                str(e),
-                extra={
-                    "document_length": doc_length,
-                    "latency": time.perf_counter() - start_time
-                }
-            )
-            raise
-
-    def _compute_final_confidence(
-        self, llm_confidence: float, validation_score: float
-    ) -> float:
-        """
-        Compute final confidence score combining LLM and validation scores.
-
-        Args:
-            llm_confidence: Confidence score from LLM
-            validation_score: Score from FAISS validation
-
-        Returns:
-            float: Combined confidence score
-        """
-        # Weight validation more heavily if we have a well-populated index
-        if self.index.ntotal > 100:
-            combined = 0.4 * llm_confidence + 0.6 * validation_score
-        else:
-            combined = 0.7 * llm_confidence + 0.3 * validation_score
-
-        return float(np.clip(combined, 0, 1))
+            logger.error(f"Classification failed: {str(e)}")
+            raise ClassificationError(
+                f"Failed to get classification: {str(e)}")
 
     async def _get_llm_classification(self, text: str) -> ClassificationResult:
         """
@@ -346,13 +293,20 @@ class HybridClassifier:
         Raises:
             Exception: If classification fails
         """
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.ollama_base_url}/api/generate",
-                    json={
-                        "model": self.model_name,
-                        "prompt": f"""Document to classify:
+        # Calculate dynamic timeout based on document length
+        timeout = min(max(30.0, len(text) * 0.1),
+                      120.0)  # Between 30s and 120s
+        retries = 0
+        last_exception = None
+
+        while retries < MAX_RETRIES:
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    response = await client.post(
+                        f"{self.ollama_base_url}/api/generate",
+                        json={
+                            "model": self.model_name,
+                            "prompt": f"""Document to classify:
 {text}
 
 You MUST choose ONLY from these categories:
@@ -363,99 +317,108 @@ You MUST choose ONLY from these categories:
 - Regulatory Document
 
 Respond with ONLY this exact JSON format:
-{{"category": "<one of the categories above>", "confidence": <number between 0 and 1>}}""",
-                        "stream": False,
+{{"category": "<one of the categories above>", "confidence": <number between 0 and 1>}}
+""",
+                            "stream": False,
+                            "options": {
+                                "temperature": 0.1
+                            }
+                        }
+                    )
+                    response.raise_for_status()
+                    response_data = response.json()
+
+                    logger.info("Raw response data: %s", response_data)
+                    response_text = response_data.get("response", "").strip()
+                    logger.info("Response text: %s", response_text)
+
+                    try:
+                        # Try to parse the entire response first
+                        try:
+                            llm_response = json.loads(response_text)
+                            logger.info("Successfully parsed full response")
+                        except json.JSONDecodeError:
+                            # If that fails, try to find and parse just the JSON object
+                            import re
+                            json_pattern = r'\{[^}]+\}'
+                            json_match = re.search(json_pattern, response_text)
+                            if not json_match:
+                                raise Exception(
+                                    "No JSON object found in response")
+
+                            json_str = json_match.group(0)
+                            logger.info("Extracted JSON string: %s", json_str)
+                            llm_response = json.loads(json_str)
+                            logger.info("Successfully parsed extracted JSON")
+
+                        # Validate the response format
+                        if not isinstance(llm_response, dict):
+                            raise Exception("Response is not a dictionary")
+                        if "category" not in llm_response:
+                            raise Exception(
+                                "Response missing 'category' field")
+                        if "confidence" not in llm_response:
+                            raise Exception(
+                                "Response missing 'confidence' field")
+                        if not isinstance(llm_response["category"], str):
+                            raise Exception("'category' must be a string")
+                        if not isinstance(llm_response["confidence"], (int, float)):
+                            raise Exception("'confidence' must be a number")
+
+                        # Validate that the category is one of the allowed categories
+                        if llm_response["category"] not in self.LEGAL_CATEGORIES:
+                            raise Exception(
+                                f"Invalid category: {llm_response['category']}")
+
+                        return ClassificationResult(
+                            category=llm_response["category"],
+                            confidence=float(llm_response["confidence"]),
+                            validation_score=None
+                        )
+
+                    except Exception as e:
+                        logger.error("Failed to parse response: %s", str(e))
+                        raise Exception(
+                            f"Invalid LLM response format: {str(e)}") from e
+
+            except Exception as e:
+                last_exception = e
+                retries += 1
+                if retries < MAX_RETRIES:
+                    wait_time = RETRY_DELAY * \
+                        (2 ** (retries - 1))  # Exponential backoff
+                    logger.warning(
+                        f"Attempt {retries} failed, retrying in {wait_time:.1f}s: {str(e)}")
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error("LLM classification failed after %d retries: %s",
+                                 MAX_RETRIES, str(e))
+                    raise Exception(
+                        f"Failed to get classification: {str(e)}") from e
+
+        raise Exception(
+            f"Failed to get classification after {MAX_RETRIES} retries: {str(last_exception)}")
+
+    async def _get_embedding(self, text: str) -> np.ndarray:
+        """Get embedding for text using Ollama API."""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.ollama_base_url}/api/embeddings",
+                    json={
+                        "model": self.model_name,
+                        "prompt": text,
                         "options": {
-                            "temperature": 0.1
+                            "num_gpu": 1,
+                            "num_thread": 4,
+                            "num_ctx": 2048
                         }
                     },
                     timeout=REQUEST_TIMEOUT
                 )
-                response.raise_for_status()
-                response_data = response.json()
 
-                logger.info("Raw response data: %s", response_data)
-                response_text = response_data.get("response", "").strip()
-                logger.info("Response text: %s", response_text)
-
-                try:
-                    # Try to parse the entire response first
-                    try:
-                        llm_response = json.loads(response_text)
-                        logger.info("Successfully parsed full response")
-                    except json.JSONDecodeError:
-                        # If that fails, try to find and parse just the JSON object
-                        import re
-                        json_pattern = r'\{[^}]+\}'
-                        json_match = re.search(json_pattern, response_text)
-                        if not json_match:
-                            raise Exception("No JSON object found in response")
-
-                        json_str = json_match.group(0)
-                        logger.info("Extracted JSON string: %s", json_str)
-                        llm_response = json.loads(json_str)
-                        logger.info("Successfully parsed extracted JSON")
-
-                    # Validate the response format
-                    if not isinstance(llm_response, dict):
-                        raise Exception("Response is not a dictionary")
-                    if "category" not in llm_response:
-                        raise Exception("Response missing 'category' field")
-                    if "confidence" not in llm_response:
-                        raise Exception("Response missing 'confidence' field")
-                    if not isinstance(llm_response["category"], str):
-                        raise Exception("'category' must be a string")
-                    if not isinstance(llm_response["confidence"], (int, float)):
-                        raise Exception("'confidence' must be a number")
-
-                    # Validate that the category is one of the allowed categories
-                    if llm_response["category"] not in self.LEGAL_CATEGORIES:
-                        raise Exception(
-                            f"Invalid category: {llm_response['category']}")
-
-                    return ClassificationResult(
-                        category=llm_response["category"],
-                        confidence=float(llm_response["confidence"]),
-                        validation_score=None
-                    )
-                except Exception as e:
-                    logger.error("Failed to parse response: %s", str(e))
-                    raise Exception(
-                        f"Invalid LLM response format: {str(e)}") from e
-
-        except Exception as e:
-            logger.error("LLM classification failed: %s", str(e))
-            raise Exception(f"Failed to get classification: {str(e)}") from e
-
-    async def _get_embedding(self, text: str) -> np.ndarray:
-        """
-        Get embedding for a text using Ollama API.
-
-        Args:
-            text: Text to get embedding for
-
-        Returns:
-            np.ndarray: Embedding vector
-
-        Raises:
-            Exception: If embedding generation fails
-        """
-        try:
-            response = await self._make_api_request(
-                "/api/embeddings",
-                {
-                    "model": self.model_name,
-                    "prompt": text[:1000],  # Limit input size
-                    "options": {
-                        "num_gpu": 1,
-                        "num_thread": 4,
-                        "num_ctx": 2048
-                    }
-                },
-                timeout=REQUEST_TIMEOUT
-            )
-
-            return np.array(response["embedding"], dtype=np.float32)
+                response_data = await response.json()
+                return np.array(response_data["embedding"], dtype=np.float32)
 
         except Exception as e:
             logger.error("Failed to generate embedding: %s", str(e))
@@ -463,7 +426,7 @@ Respond with ONLY this exact JSON format:
 
     async def _validate_classification(
         self, text: str, category: str
-    ) -> Tuple[float, List[Dict[str, float]]]:
+    ) -> Tuple[float, List[SimilarDocument]]:
         """
         Validate classification using FAISS similarity search.
 
@@ -472,7 +435,7 @@ Respond with ONLY this exact JSON format:
             category: The category to validate against
 
         Returns:
-            Tuple[float, List[Dict[str, float]]]: Validation score and similar documents
+            Tuple[float, List[SimilarDocument]]: Validation score and similar documents
 
         Raises:
             ValidationError: If validation fails
@@ -500,15 +463,15 @@ Respond with ONLY this exact JSON format:
                 # Cosine similarity (already normalized)
                 similarity = float(dist)
                 doc_category = self.categories[idx]
-                similar_docs.append({
-                    "category": doc_category,
-                    "similarity": similarity
-                })
+                similar_docs.append(SimilarDocument(
+                    category=doc_category,
+                    similarity=similarity
+                ))
 
             # Calculate validation score
             category_similarities = [
-                doc["similarity"] for doc in similar_docs
-                if doc["category"] == category
+                doc.similarity for doc in similar_docs
+                if doc.category == category
             ]
 
             if not category_similarities:
@@ -573,41 +536,30 @@ Respond with ONLY this exact JSON format:
             # Normalize embeddings
             faiss.normalize_L2(embeddings_array)
 
-            # Add to both indices
-            self.index.add(x=embeddings_array)
-            self.normalized_index.add(x=embeddings_array)
+            # Add to index
+            self.index.add(embeddings_array)
 
-            # Update category metadata
+            # Update categories list
             self.categories.extend([category] * len(examples))
-            self.category_counts[category] = (
-                self.category_counts.get(category, 0) + len(examples)
-            )
 
-            # Update metrics
-            INDEX_SIZE.labels(category=category).set(
-                self.category_counts[category])
+            # Update category counts
+            if category not in self.category_counts:
+                self.category_counts[category] = len(examples)
+            else:
+                self.category_counts[category] += len(examples)
 
-            processing_time = time.perf_counter() - start_time
+            # Log performance metrics
+            end_time = time.perf_counter()
             logger.info(
-                "Added examples to category",
-                extra={
-                    "category": category,
-                    "num_examples": len(examples),
-                    "processing_time": processing_time,
-                    "total_examples": self.category_counts[category]
-                }
+                "Added %d examples to category '%s' in %.2f seconds",
+                len(examples),
+                category,
+                end_time - start_time
             )
 
         except Exception as e:
-            logger.error(
-                "Failed to add category: %s",
-                str(e),
-                extra={
-                    "category": category,
-                    "num_examples": len(examples)
-                }
-            )
-            raise
+            logger.error("Failed to add category: %s", str(e))
+            raise Exception(f"Failed to add category: {str(e)}") from e
 
     async def train_with_examples(
         self, examples: Dict[str, List[str]]

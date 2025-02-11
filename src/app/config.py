@@ -13,15 +13,20 @@ class Settings(BaseSettings):
     api_version: str = "1.0.0"
 
     # Security
-    jwt_secret_key: str = "your-secret-key-here"  # Change in production
+    jwt_secret_key: str  # Loaded from environment variable JWT_SECRET_KEY
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
     # Classifier Settings
     ollama_base_url: str = "http://localhost:11434"
-    model_name: str = "legal-classifier"  # Using our optimized model
+    model_name: str = "mistral:7b"  # Using Mistral-7B model
     embedding_dim: int = 384
     similarity_threshold: float = 0.75
+
+    # Ollama Model Parameters
+    ollama_num_ctx: int = 2048
+    ollama_num_gpu: int = 1
+    ollama_num_thread: int = 4
 
     # Rate Limiting
     rate_limit_requests: int = 1000
