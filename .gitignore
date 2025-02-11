@@ -21,8 +21,10 @@ wheels/
 *.egg
 
 # Virtual Environment
-venv/
+.env
+.venv
 env/
+venv/
 ENV/
 
 # IDE
@@ -30,21 +32,30 @@ ENV/
 .vscode/
 *.swp
 *.swo
-.project
-.pydevproject
 
 # Testing
-.pytest_cache/
 .coverage
 htmlcov/
+.pytest_cache/
 .tox/
+.coverage.*
+coverage.xml
+*.cover
+
+# Logs
+*.log
+logs/
+log/
+
+# Development
+.DS_Store
+.cursorrules
+.cursorrules_dev
+node_modules/
+package-lock.json
+package.json
 
 # Project specific
-docs/closed/
-.env
-*.log
-.DS_Store
-
-# Local development
-local_settings.py
-db.sqlite3
+benchmark_results/
+uvicorn.log
+app.log
