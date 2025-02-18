@@ -69,7 +69,7 @@ tests/                # Test suite
 
    - Mistral-7B integration via Ollama
    - GPU-accelerated inference
-   - FAISS similarity validation
+   - FAISS similarity validation (0.85 threshold)
    - Response caching (1-hour TTL)
 
 2. **API Layer**
@@ -80,33 +80,34 @@ tests/                # Test suite
 
 ## 🚦 Project Status
 
-Current implementation status (Feb 7, 2025):
+Current implementation status:
 
-✅ Core Classification Engine
+✅ Core Features
 
-- GPU-accelerated Mistral-7B integration
-- Basic FAISS validation layer
-- Performance monitoring
+- Classification engine with Mistral-7B
+- FAISS validation layer
+- Performance monitoring and logging
 
-🚧 In Progress (3-Day Sprint)
+✅ API & Security
 
-Day 1:
+- JWT authentication
+- Rate limiting middleware
+- FastAPI async endpoints
 
-- Optimizing Mistral-7B integration
-- Finalizing FAISS validation
-- Implementing response caching
+✅ Testing & Quality
 
-Day 2:
+- Basic test coverage
+- Error handling
+- Input validation
 
-- API security refinements
-- Performance optimization
-- Load testing implementation
+🚧 Optimization Goals
 
-Day 3:
+- Response time improvement (Current: ~33s → Target: <2s)
+- GPU utilization optimization
+- Throughput enhancement (Current: ~1.8 RPM → Target: 150 RPM)
+- Production deployment setup
 
-- AWS deployment setup
-- Documentation completion
-- Final testing & benchmarks
+See [BENCHMARKS.md](./BENCHMARKS.md) for detailed performance analysis and optimization plans.
 
 ## 🛠️ Development Setup
 
